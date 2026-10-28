@@ -1,0 +1,192 @@
+{% extends "library/base.html" %}
+{% load static %}
+
+{% block title %}Vitrin | SKAL Kütüphanesi{% endblock %}
+
+{% block content %}
+<!-- Section 1: Editorial Hero Statement -->
+<section class="hero-editorial" aria-labelledby="heroHeading">
+    <div class="hero-statement-wrap">
+        <p class="parenthetical-caption hero-eyebrow">(Sezai Karakoç Anadolu Lisesi Kütüphane Rehberi ve Kataloğu)</p>
+
+        <h1 class="hero-display" id="heroHeading">
+            Sezai Karakoç Anadolu Lisesi
+            <span class="hero-inline-emblem" aria-hidden="true">
+                <picture>
+                    <source srcset="{% static 'library/img/logo.webp' %}" type="image/webp">
+                    <img src="{% static 'library/img/logo-lg.png' %}" alt="" class="hero-emblem-img" width="84" height="84">
+                </picture>
+            </span>
+            kütüphanesinde aradığınız kitabı <em>keşfedin,</em> müsaitlik ve <em>iade tarihlerini</em> anında takip edin.
+        </h1>
+
+        <svg class="squiggle-line hero-squiggle" viewBox="0 0 680 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M4 22C92 6 174 32 268 16C362 0 434 30 532 14C588 5 636 18 676 11" stroke="#121124" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+
+        <form class="hero-search-form" action="{% url 'book_search' %}" method="get" role="search" aria-label="Hızlı katalog araması">
+            <div class="hero-search-capsule">
+                <label for="heroQuickSearch" class="sr-only">Kitap adı veya yazar ara</label>
+                <span class="hero-search-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </span>
+                <input
+                    type="search"
+                    id="heroQuickSearch"
+                    name="q"
+                    class="hero-search-input"
+                    placeholder="Kitap adı veya yazar yazın..."
+                    autocomplete="off"
+                >
+                <button type="submit" class="btn-pill btn-pill-primary hero-search-submit">
+                    Katalogda Ara
+                </button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- Section 2: Canlı Kütüphane Özeti (Live Library Metrics) -->
+<section class="editorial-section metrics-section" aria-labelledby="metricsHeading">
+    <div class="section-header-editorial">
+        <span class="section-index-marker" aria-hidden="true">01</span>
+        <div class="section-title-group">
+            <h2 class="section-heading" id="metricsHeading">Canlı Kütüphane <em>Özeti</em></h2>
+            <span class="parenthetical-caption">(Gerçek zamanlı katalog verileri)</span>
+        </div>
+    </div>
+
+    <div class="metrics-grid">
+        <article class="pasted-card metric-card">
+            <span class="metric-index" aria-hidden="true">01</span>
+            <p class="metric-value">{{ total_books|default:0 }}</p>
+            <h3 class="metric-label">Kayıtlı Eser</h3>
+            <p class="parenthetical-caption">(Kütüphane envanterindeki toplam kitap)</p>
+        </article>
+
+        <article class="pasted-card metric-card metric-card-stagger">
+            <span class="metric-index" aria-hidden="true">02</span>
+            <p class="metric-value metric-value-available">{{ available_books|default:0 }}</p>
+            <h3 class="metric-label">Rafta Müsait</h3>
+            <p class="parenthetical-caption">(Şu an ödünç alınmaya hazır eserler)</p>
+        </article>
+
+        <article class="pasted-card metric-card">
+            <span class="metric-index" aria-hidden="true">03</span>
+            <p class="metric-value metric-value-borrowed">{{ borrowed_books|default:0 }}</p>
+            <h3 class="metric-label">Öğrencide Ödünçte</h3>
+            <p class="parenthetical-caption">(İade tarihi takip edilen eserler)</p>
+        </article>
+    </div>
+</section>
+
+<!-- Section 3: Katalog Vitrini (Featured Books Preview) -->
+<section class="editorial-section vitrin-section" aria-labelledby="vitrinHeading">
+    <div class="section-header-editorial">
+        <span class="section-index-marker" aria-hidden="true">02</span>
+        <div class="section-title-group">
+            <h2 class="section-heading" id="vitrinHeading">Katalog <em>Vitrini</em></h2>
+            <span class="parenthetical-caption">(Kütüphane raflarından seçkiler ve güncel durumları)</span>
+        </div>
+    </div>
+
+    {% if featured_books %}
+        <div class="books-grid vitrin-books-grid">
+            {% for book in featured_books %}
+                <article class="book-card">
+                    <div class="book-cover-container">
+                        {% if book.cover %}
+                            <img src="{{ book.cover.url }}" alt="{{ book.name }} kapak görseli" class="book-cover" loading="lazy">
+                        {% else %}
+                            <div class="book-cover-placeholder" aria-label="Kapak resmi yok">
+                                <svg class="placeholder-svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                                </svg>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="book-card-top">
+                        <div class="book-status-wrap">
+                            {% if book.is_available %}
+                                <span class="badge badge-available">Müsait</span>
+                                <span class="book-meta-note">Kütüphane rafında</span>
+                            {% else %}
+                                <span class="badge badge-borrowed">Ödünçte</span>
+                                {% if book.due_date %}
+                                    <span class="book-due-date {% if book.is_overdue %}is-overdue{% endif %}">
+                                        İade Tarihi: {{ book.due_date|date:"d.m.Y" }}
+                                    </span>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="book-card-body">
+                        <h3 class="book-name">{{ book.name }}</h3>
+                        <p class="book-author">{{ book.author }}</p>
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="pasted-card empty-state">
+            <h3 class="empty-state-title">Katalogda henüz kayıtlı kitap bulunmuyor</h3>
+            <p class="empty-state-desc">Kütüphane yönetimi tarafından kitap eklendiğinde eserler bu vitrinde yer alacaktır.</p>
+        </div>
+    {% endif %}
+
+    <div class="vitrin-cta-wrap">
+        <a href="{% url 'book_search' %}" class="btn-pill btn-pill-wide">
+            TÜM KATALOĞU VE ARAMAYI AÇ
+        </a>
+    </div>
+</section>
+
+<!-- Section 4: Kütüphane İşleyişi (01 / 02 / 03 Editorial Workflow) -->
+<section class="editorial-section workflow-section" aria-labelledby="workflowHeading">
+    <div class="section-header-editorial">
+        <span class="section-index-marker" aria-hidden="true">03</span>
+        <div class="section-title-group">
+            <h2 class="section-heading" id="workflowHeading">Kütüphane <em>İşleyişi</em></h2>
+            <span class="parenthetical-caption">(Üç adımda ödünç alma ve iade süreci)</span>
+        </div>
+    </div>
+
+    <div class="workflow-wrapper">
+        <svg class="squiggle-line workflow-squiggle" viewBox="0 0 1000 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M20 55C190 10 340 85 510 42C680 0 820 78 980 30" stroke="#121124" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+
+        <div class="workflow-grid">
+            <article class="pasted-card workflow-card">
+                <span class="workflow-step-number">01</span>
+                <h3 class="workflow-title">Katalogdan <em>Sorgulayın</em></h3>
+                <p class="workflow-desc">
+                    Web veya mobil cihazınızdan kitabın rafta olup olmadığını ya da hangi tarihte iade edileceğini kontrol edin.
+                </p>
+            </article>
+
+            <article class="pasted-card workflow-card workflow-card-stagger">
+                <span class="workflow-step-number">02</span>
+                <h3 class="workflow-title">Kütüphane Bankosundan <em>Teslim Alın</em></h3>
+                <p class="workflow-desc">
+                    Müsait kitabı kütüphane görevlisine okul numaranızla kaydettirerek ödünç alın.
+                </p>
+            </article>
+
+            <article class="pasted-card workflow-card">
+                <span class="workflow-step-number">03</span>
+                <h3 class="workflow-title">Zamanında <em>İade Edin</em></h3>
+                <p class="workflow-desc">
+                    Belirtilen son iade tarihinde kitabı kütüphane görevlisine teslim ederek kaydınızı kapatın.
+                </p>
+            </article>
+        </div>
+    </div>
+</section>
+{% endblock %}

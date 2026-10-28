@@ -1,9 +1,10 @@
+from datetime import date, timedelta
 import uuid
 from typing import Any
-from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator
-from django.db import models
+from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
+from django.db import models, transaction
+from django.utils import timezone
 
 
 def validate_cover_image(value: Any) -> None:
@@ -13,13 +14,72 @@ def validate_cover_image(value: Any) -> None:
         raise ValidationError("Kapak görseli maksimum 2MB boyutunda olabilir.")
 
 
+class Student(models.Model):
+    """Kütüphaneden kitap ödünç alabilen okul öğrencilerini temsil eder."""
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="Kimlik",
+    )
+    full_name = models.CharField(max_length=255, verbose_name="Ad Soyad")
+    student_number = models.CharField(
+        max_length=50,
+        unique=True,
+        db_index=True,
+        verbose_name="Okul Numarası",
+    )
+    graduation_year = models.PositiveIntegerField(
+        db_index=True,
+        verbose_name="Mezuniyet Yılı",
+        validators=[MinValueValidator(2020), MaxValueValidator(2100)],
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Kayıt Tarihi")
+
+    class Meta:
+        verbose_name = "Öğrenci"
+        verbose_name_plural = "Öğrenciler"
+        ordering = ['graduation_year', 'full_name']
+
+    @classmethod
+    def current_graduation_cutoff_year(cls, today: date | None = None) -> int:
+        """Akademik takvime göre (1 Temmuz itibarıyla) mezuniyet sınır yılını hesaplar."""
+        today = today or timezone.localdate()
+        if (today.month, today.day) >= (7, 1):
+            return today.year
+        return today.year - 1
+
+    @property
+    def is_graduated(self) -> bool:
+        """Öğrencinin mezuniyet yılının dolup dolmadığını belirtir."""
+        return self.graduation_year <= self.current_graduation_cutoff_year()
+
+    @classmethod
+    def purge_graduated(cls, today: date | None = None) -> tuple[int, int]:
+        """Mezuniyet yılı geçmiş ve üzerinde zimmetli kitap bulunmayan öğrencileri siler.
+
+        Zimmet Kilidi: Üzerinde ödünç kitap bulunan mezun öğrenciler silinmez.
+
+        Returns:
+            tuple[int, int]: (silinen_ogrenci_sayisi, zimmet_nedeniyle_korunan_mezun_sayisi)
+        """
+        cutoff = cls.current_graduation_cutoff_year(today)
+        with transaction.atomic():
+            graduated_qs = cls.objects.filter(graduation_year__lte=cutoff)
+            blocked_count = graduated_qs.filter(borrowed_books__isnull=False).distinct().count()
+            deletable_qs = graduated_qs.filter(borrowed_books__isnull=True)
+            deleted_count, _ = deletable_qs.delete()
+        return deleted_count, blocked_count
+
+    def __str__(self) -> str:
+        return f"{self.full_name} ({self.student_number} - Mezuniyet: {self.graduation_year})"
+
+
 class Book(models.Model):
     STATUS_CHOICES = (
-        ('pending', 'Onay bekliyor'),
-        ('approved', 'Ödünç verildi'),
-        ('denied', 'Reddedildi'),
-        ('return_pending', 'İade onayı bekliyor'),
-        ('returned', 'İade edildi'),
+        ('returned', 'Müsait'),
+        ('approved', 'Ödünçte'),
     )
 
     id = models.UUIDField(
@@ -41,12 +101,23 @@ class Book(models.Model):
         verbose_name="Kapak Resmi",
     )
     borrowed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        'library.Student',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="borrowed_books",
         verbose_name="Ödünç Alan Öğrenci",
+    )
+    borrowed_at = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Ödünç Verilme Tarihi",
+    )
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Son İade Tarihi",
     )
     status = models.CharField(
         max_length=20,
@@ -65,63 +136,91 @@ class Book(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    (models.Q(status__in=['pending', 'approved', 'return_pending']) & models.Q(borrowed_by__isnull=False)) |
-                    (models.Q(status__in=['returned', 'denied']) & models.Q(borrowed_by__isnull=True))
+                    (
+                        models.Q(status='approved')
+                        & models.Q(borrowed_by__isnull=False)
+                        & models.Q(due_date__isnull=False)
+                    )
+                    | (
+                        models.Q(status='returned')
+                        & models.Q(borrowed_by__isnull=True)
+                        & models.Q(due_date__isnull=True)
+                    )
                 ),
-                name="book_status_borrower_consistency"
+                name="book_status_borrower_consistency",
             )
         ]
 
-    def request_borrow(self, user: Any) -> None:
-        """Öğrencinin ödünç alma talebini doğrular ve onay bekliyor durumuna alır."""
-        if not getattr(user, 'is_active', True):
-            raise ValidationError("Aktif olmayan kullanıcı ödünç talebinde bulunamaz.")
-        if self.status in ['pending', 'approved', 'return_pending'] or self.borrowed_by is not None:
-            raise ValidationError("Bu kitap şu anda ödünç alınamaz.")
-        self.status = 'pending'
-        self.borrowed_by = user
-
-    def approve_borrow(self) -> None:
-        """Yöneticinin ödünç alma talebini onaylamasını sağlar."""
-        if self.status != 'pending':
-            raise ValidationError("Yalnızca onay bekleyen ödünç talepleri onaylanabilir.")
+    def assign_to_student(
+        self,
+        student: Student,
+        borrowed_at: date | None = None,
+        due_date: date | None = None,
+    ) -> None:
+        """Kitabı belirtilen öğrenciye ödünç verir ve iade tarihini (varsayılan 14 gün) atar."""
+        if student is None:
+            raise ValidationError("Ödünç verilecek öğrenci seçilmelidir.")
+        actual_borrowed_at = borrowed_at or timezone.localdate()
+        actual_due_date = due_date or (actual_borrowed_at + timedelta(days=14))
+        if actual_due_date < actual_borrowed_at:
+            raise ValidationError("Son iade tarihi, ödünç verilme tarihinden önce olamaz.")
+        self.borrowed_by = student
         self.status = 'approved'
+        self.borrowed_at = actual_borrowed_at
+        self.due_date = actual_due_date
 
-    def deny_borrow(self) -> None:
-        """Yöneticinin ödünç alma talebini reddetmesini ve kitabı boşa çıkarmasını sağlar."""
-        if self.status != 'pending':
-            raise ValidationError("Yalnızca onay bekleyen ödünç talepleri reddedilebilir.")
-        self.status = 'denied'
-        self.borrowed_by = None
-
-    def request_return(self, user: Any) -> None:
-        """Öğrencinin ödünç aldığı kitap için iade talebi başlatmasını sağlar."""
-        if self.borrowed_by != user or self.status != 'approved':
-            raise ValidationError("Bu kitap için iade işlemi başlatamazsınız.")
-        self.status = 'return_pending'
-
-    def confirm_return(self) -> None:
-        """Yöneticinin iade talebini onaylayarak kitabı tekrar müsait duruma getirmesini sağlar."""
-        if self.status != 'return_pending':
-            raise ValidationError("Yalnızca iade onayı bekleyen kitapların iadesi onaylanabilir.")
+    def mark_returned(self) -> None:
+        """Kitabın iadesini alır ve tekrar müsait duruma getirir."""
         self.status = 'returned'
         self.borrowed_by = None
+        self.borrowed_at = None
+        self.due_date = None
 
-    def deny_return(self) -> None:
-        """Yöneticinin iade talebini reddederek kitabı tekrar ödünç verildi durumuna almasını sağlar."""
-        if self.status != 'return_pending':
-            raise ValidationError("Yalnızca iade onayı bekleyen kitapların iade talebi reddedilebilir.")
-        self.status = 'approved'
+    def clean(self) -> None:
+        """Yönetim paneli ve model doğrulamalarında durum-öğrenci-tarih senkronizasyonunu sağlar."""
+        super().clean()
+        if self.borrowed_by is not None and self.status == 'returned':
+            self.status = 'approved'
+
+        if self.status == 'approved':
+            if self.borrowed_by is None:
+                raise ValidationError({'borrowed_by': 'Ödünç verilen kitap için bir öğrenci seçilmelidir.'})
+            if self.borrowed_at is None:
+                self.borrowed_at = timezone.localdate()
+            if self.due_date is None:
+                self.due_date = self.borrowed_at + timedelta(days=14)
+            if self.due_date < self.borrowed_at:
+                raise ValidationError({'due_date': 'Son iade tarihi, ödünç verilme tarihinden önce olamaz.'})
+        elif self.status == 'returned' and self.borrowed_by is None:
+            self.borrowed_at = None
+            self.due_date = None
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Kayıt sırasında ödünç ve iade tarihlerini otomatik senkronize eder."""
+        if self.status == 'approved' and self.borrowed_by is not None:
+            if self.borrowed_at is None:
+                self.borrowed_at = timezone.localdate()
+            if self.due_date is None:
+                self.due_date = self.borrowed_at + timedelta(days=14)
+        elif self.status == 'returned' and self.borrowed_by is None:
+            self.borrowed_at = None
+            self.due_date = None
+        super().save(*args, **kwargs)
 
     @property
     def borrowed(self) -> bool:
-        """Kitabın şu anda öğrenci kullanımında veya iade sürecinde olup olmadığını belirtir."""
-        return self.status in ['approved', 'return_pending']
+        """Kitabın şu anda ödünçte olup olmadığını belirtir."""
+        return self.status == 'approved'
 
     @property
     def is_available(self) -> bool:
-        """Kitabın yeni bir ödünç talebi için müsait olup olmadığını belirtir."""
-        return self.status in ['returned', 'denied'] and self.borrowed_by is None
+        """Kitabın ödünç verilmeye müsait olup olmadığını belirtir."""
+        return self.status == 'returned' and self.borrowed_by_id is None
+
+    @property
+    def is_overdue(self) -> bool:
+        """Ödünçteki kitabın son iade tarihinin geçip geçmediğini belirtir."""
+        return bool(self.borrowed and self.due_date and self.due_date < timezone.localdate())
 
     def __str__(self) -> str:
         """Kitabın adını ve yazarını gösteren metin temsilini döndürür."""

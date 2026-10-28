@@ -1,15 +1,16 @@
 /*!
  * SKAL Kütüphanesi - Yönetim Paneli Özel Stilleri & Rehber Teması
- * Kurumsal Renk: #1f4d3a (Koyu Orman Yeşili)
+ * Kurumsal Renk: #282471 (SKAL Kurumsal Lacivert) & #ec782b (Kurumsal Turuncu)
  * WCAG 2.2 AA Uyumlu Kontrast ve Odak Göstergeleri
  */
 
 :root {
-  --skal-primary: #1f4d3a;
-  --skal-primary-hover: #163a2b;
-  --skal-primary-light: #f1f6f3;
-  --skal-primary-border: #c8dcd3;
-  --skal-primary-focus: rgba(31, 77, 58, 0.25);
+  --skal-primary: #282471;
+  --skal-primary-hover: #1e1b59;
+  --skal-primary-light: #f2f2fa;
+  --skal-primary-border: #c5c3eb;
+  --skal-primary-focus: rgba(40, 36, 113, 0.25);
+  --skal-accent-orange: #ec782b;
 
   --skal-text: #141414;
   --skal-text-muted: #6b6b66;
@@ -28,7 +29,7 @@
 /* Özel Popover Konteyneri */
 .skal-tour-popover {
   border-color: var(--skal-primary-border);
-  box-shadow: 0 10px 25px -5px rgba(31, 77, 58, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 25px -5px rgba(40, 36, 113, 0.14), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
 }
 
 .skal-tour-popover .driver-popover-title {
@@ -114,7 +115,7 @@
 }
 
 #skal-start-tour-btn:hover {
-  background-color: #e2ede7;
+  background-color: #e2e1f5;
   border-color: var(--skal-primary);
   color: var(--skal-primary-hover);
 }
@@ -142,13 +143,13 @@
   color: #ffffff;
   border-color: var(--skal-primary-hover);
   border-radius: var(--skal-radius);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(40, 36, 113, 0.2);
 }
 
 #skal-start-tour-btn.skal-tour-floating:hover {
   background-color: var(--skal-primary-hover);
   color: #ffffff;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 16px rgba(40, 36, 113, 0.28);
 }
 
 /* ==========================================================================

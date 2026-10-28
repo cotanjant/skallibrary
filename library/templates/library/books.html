@@ -1,77 +1,137 @@
 {% extends "library/base.html" %}
 
-{% block title %}Kitaplar | SKAL Kütüphanesi{% endblock %}
+{% block title %}Kitap Arama ve Katalog | SKAL Kütüphanesi{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1 class="page-title">Kitaplar</h1>
-
-    {% if not user.is_authenticated %}
-        <div class="notice-bar">
-            <span>Ödünç almak veya iade etmek için giriş yapmalısınız.</span>
-            <a href="{% url 'login' %}" class="btn btn-outline btn-sm">Giriş Yap</a>
+<div class="page-header catalog-page-header">
+    <div class="section-header-editorial">
+        <span class="section-index-marker" aria-hidden="true">01</span>
+        <div class="section-title-group">
+            <h1 class="page-title">Kitap Arama ve <em>Katalog</em></h1>
+            <span class="parenthetical-caption">(Kitap adı, yazar, müsaitlik durumu ve iade tarihine göre anlık sorgulama)</span>
         </div>
-    {% endif %}
+    </div>
+    <div class="catalog-summary-pill">
+        <span class="books-count" id="booksCount" aria-live="polite">{{ books|length }} kitap</span>
+    </div>
 </div>
 
-<div class="catalog-controls">
-    <div class="search-wrapper">
-        <span class="search-icon" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-        </span>
-        <input
-            type="text"
-            id="bookSearch"
-            class="search-input"
-            placeholder="Kitap veya yazar ara..."
-            autocomplete="off"
-            aria-label="Kitap veya yazar ara"
-        >
-    </div>
-    <span class="books-count" id="booksCount">{{ books|length }} kitap</span>
-</div>
+<section class="catalog-controls" aria-label="Katalog arama ve filtreleme araçları">
+    <form id="catalogFilterForm" class="catalog-filter-form" method="get" action="{% url 'book_search' %}" role="search">
+        <input type="hidden" name="status" id="statusInput" value="{{ current_status|default:'' }}">
+
+        <div class="search-row">
+            <div class="search-wrapper">
+                <label for="bookSearch" class="sr-only">Kitap veya yazar ara</label>
+                <span class="search-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </span>
+                <input
+                    type="search"
+                    id="bookSearch"
+                    name="q"
+                    value="{{ query|default:'' }}"
+                    class="search-input"
+                    placeholder="Kitap adı veya yazar ara..."
+                    autocomplete="off"
+                    aria-label="Kitap veya yazar ara"
+                >
+                <button
+                    type="button"
+                    id="clearSearchBtn"
+                    class="clear-search-btn"
+                    aria-label="Aramayı temizle"
+                    {% if not query %}hidden{% endif %}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <button type="submit" class="btn-pill btn-pill-primary search-submit-btn">Ara</button>
+        </div>
+
+        <div class="filter-sort-row">
+            <div class="status-chips" role="tablist" aria-label="Müsaitlik durumuna göre filtrele">
+                <button
+                    type="button"
+                    role="tab"
+                    class="filter-chip {% if not current_status or current_status == 'all' %}is-active{% endif %}"
+                    data-status="all"
+                    aria-selected="{% if not current_status or current_status == 'all' %}true{% else %}false{% endif %}"
+                >
+                    Tümü
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    class="filter-chip {% if current_status == 'available' %}is-active{% endif %}"
+                    data-status="available"
+                    aria-selected="{% if current_status == 'available' %}true{% else %}false{% endif %}"
+                >
+                    Müsait (Rafta)
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    class="filter-chip {% if current_status == 'borrowed' %}is-active{% endif %}"
+                    data-status="borrowed"
+                    aria-selected="{% if current_status == 'borrowed' %}true{% else %}false{% endif %}"
+                >
+                    Ödünçte
+                </button>
+            </div>
+
+            <div class="sort-control-wrap">
+                <label for="bookSort" class="sort-label">Sırala:</label>
+                <select id="bookSort" name="sort" class="sort-select" aria-label="Kitapları sırala">
+                    <option value="name" {% if current_sort == 'name' or not current_sort %}selected{% endif %}>Kitap Adı (A-Z)</option>
+                    <option value="author" {% if current_sort == 'author' %}selected{% endif %}>Yazar (A-Z)</option>
+                    <option value="availability" {% if current_sort == 'availability' %}selected{% endif %}>Önce Müsait Olanlar</option>
+                    <option value="due_date" {% if current_sort == 'due_date' %}selected{% endif %}>İade Tarihi Yaklaşan</option>
+                </select>
+            </div>
+        </div>
+    </form>
+</section>
 
 <div class="books-grid" id="booksGrid">
     {% for book in books %}
-        <article class="book-card" data-name="{{ book.name }}" data-author="{{ book.author }}">
+        <article
+            class="book-card"
+            data-name="{{ book.name }}"
+            data-author="{{ book.author }}"
+            data-status="{% if book.is_available %}available{% else %}borrowed{% endif %}"
+            data-due="{{ book.due_date|date:'Y-m-d'|default:'9999-12-31' }}"
+        >
             <div class="book-cover-container">
                 {% if book.cover %}
-                    <img src="{{ book.cover.url }}" alt="{{ book.name }}" class="book-cover">
+                    <img src="{{ book.cover.url }}" alt="{{ book.name }}" class="book-cover" loading="lazy">
                 {% else %}
                     <div class="book-cover-placeholder" aria-label="Kapak resmi yok">
-                        <span class="placeholder-icon">📖</span>
+                        <svg class="placeholder-svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                        </svg>
                     </div>
                 {% endif %}
             </div>
 
             <div class="book-card-top">
                 <div class="book-status-wrap">
-                    {% if not user.is_authenticated %}
-                        {% if book.is_available %}
-                            <span class="badge badge-available">Müsait</span>
-                        {% else %}
-                            <span class="badge badge-borrowed">Ödünçte</span>
-                        {% endif %}
+                    {% if book.is_available %}
+                        <span class="badge badge-available">Müsait</span>
+                        <span class="book-meta-note">Kütüphane rafında</span>
                     {% else %}
-                        {% if book.borrowed_by == user %}
-                            {% if book.status == 'pending' %}
-                                <span class="badge badge-user">Onay Bekliyor</span>
-                            {% elif book.status == 'approved' %}
-                                <span class="badge badge-user">Sizde</span>
-                            {% elif book.status == 'return_pending' %}
-                                <span class="badge badge-user">İade Bekleniyor</span>
-                            {% else %}
-                                <span class="badge badge-available">Müsait</span>
-                            {% endif %}
-                        {% elif book.status == 'pending' %}
-                            <span class="badge badge-borrowed">Talep Edildi</span>
-                        {% elif book.borrowed %}
-                            <span class="badge badge-borrowed">Ödünçte</span>
-                        {% else %}
-                            <span class="badge badge-available">Müsait</span>
+                        <span class="badge badge-borrowed">Ödünçte</span>
+                        {% if book.due_date %}
+                            <span class="book-due-date {% if book.is_overdue %}is-overdue{% endif %}">
+                                İade Tarihi: {{ book.due_date|date:"d.m.Y" }}
+                            </span>
                         {% endif %}
                     {% endif %}
                 </div>
@@ -81,48 +141,26 @@
                 <h2 class="book-name">{{ book.name }}</h2>
                 <p class="book-author">{{ book.author }}</p>
             </div>
-
-            <div class="book-card-footer">
-                {% if not user.is_authenticated %}
-                    <a href="{% url 'login' %}" class="btn btn-outline btn-block">Giriş Yap</a>
-                {% else %}
-                    {% if book.borrowed_by == user %}
-                        {% if book.status == 'approved' %}
-                            <form method="POST" action="{% url 'return_book' book.id %}" class="action-form">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-warning btn-block">İade Et</button>
-                            </form>
-                        {% elif book.status == 'return_pending' %}
-                            <button type="button" class="btn btn-disabled btn-block" disabled>İade Onayı Bekleniyor</button>
-                        {% elif book.status == 'pending' %}
-                            <button type="button" class="btn btn-disabled btn-block" disabled>Ödünç Onayı Bekleniyor</button>
-                        {% else %}
-                            <form method="POST" action="{% url 'borrow_book' book.id %}" class="action-form">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-primary btn-block">Ödünç Al</button>
-                            </form>
-                        {% endif %}
-                    {% elif book.is_available %}
-                        <form method="POST" action="{% url 'borrow_book' book.id %}" class="action-form">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-primary btn-block">Ödünç Al</button>
-                        </form>
-                    {% elif book.status == 'pending' %}
-                        <button type="button" class="btn btn-disabled btn-block" disabled>Talep Edildi</button>
-                    {% else %}
-                        <button type="button" class="btn btn-disabled btn-block" disabled>Ödünç Verildi</button>
-                    {% endif %}
-                {% endif %}
-            </div>
         </article>
     {% empty %}
-        <div class="empty-state">
-            <p>Kayıtlı kitap bulunmuyor.</p>
-        </div>
+        {% if not query and not current_status %}
+            <div id="emptyCatalogState" class="pasted-card empty-state">
+                <h2 class="empty-state-title">Kayıtlı kitap bulunmuyor.</h2>
+                <p class="empty-state-desc">Kütüphane envanterine henüz kitap eklenmemiş. Kütüphane görevlisi yönetim panelinden yeni eserler ekleyebilir.</p>
+            </div>
+        {% endif %}
     {% endfor %}
 
-    <div id="noSearchResults" class="empty-state" style="display: none;">
-        <p>Sonuç bulunamadı.</p>
+    <div
+        id="noSearchResults"
+        class="pasted-card empty-state"
+        {% if books or not query and not current_status %}style="display: none;"{% endif %}
+    >
+        <h2 class="empty-state-title">Sonuç bulunamadı.</h2>
+        <p class="empty-state-desc">Arama teriminize veya seçtiğiniz durum filtresine uygun bir kitap eşleşmedi.</p>
+        <div class="empty-state-actions">
+            <a href="{% url 'book_search' %}" id="resetFiltersBtn" class="btn-pill">Filtreleri Temizle</a>
+        </div>
     </div>
 </div>
 {% endblock %}

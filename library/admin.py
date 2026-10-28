@@ -4,7 +4,7 @@ from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
 from django.http import HttpRequest
 from django.utils.html import format_html
 from django.utils.safestring import SafeText, mark_safe
@@ -12,7 +12,7 @@ from unfold.admin import ModelAdmin
 from unfold.decorators import display
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from library.models import Book
+from library.models import Book, Student
 
 admin.site.unregister(User)
 admin.site.unregister(Group)
@@ -30,63 +30,95 @@ class GroupAdmin(BaseGroupAdmin, ModelAdmin):
     pass
 
 
-@admin.action(description="Ödünç talebini onayla")
-def approve_borrow(modeladmin: Any, request: HttpRequest, queryset: QuerySet) -> None:
-    """Seçili onay bekleyen kitaplar için ödünç alma taleplerini onaylar."""
+@admin.action(description="Mezun öğrencileri temizle (Zimmetsiz olanlar)")
+def purge_graduated_action(modeladmin: Any, request: HttpRequest, queryset: QuerySet) -> None:
+    """Mezuniyet yılı geçmiş ve üzerinde ödünç kitap bulunmayan öğrencileri siler."""
+    deleted_count, blocked_count = Student.purge_graduated()
+    modeladmin.message_user(
+        request,
+        f"{deleted_count} mezun öğrenci kaydı silindi. "
+        f"Zimmetli kitabı bulunan {blocked_count} mezun öğrenci korundu.",
+    )
+
+
+@admin.register(Student)
+class StudentAdmin(ModelAdmin):
+    list_display = (
+        'full_name',
+        'student_number',
+        'graduation_year',
+        'graduation_status_badge',
+        'active_loans_count',
+    )
+    list_filter = ('graduation_year',)
+    list_filter_submit = True
+    search_fields = ('full_name', 'student_number')
+    search_help_text = "Öğrenci adı veya okul numarasına göre arama yapabilirsiniz."
+    list_per_page = 20
+    actions = [purge_graduated_action]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return super().get_queryset(request).annotate(loans_count=Count('borrowed_books'))
+
+    @display(
+        description="Mezuniyet Durumu",
+        label={
+            'graduated': 'warning',
+            'active': 'success',
+        },
+    )
+    def graduation_status_badge(self, obj: Student) -> tuple[str, str]:
+        """Öğrencinin aktif veya mezun durumunu rozet olarak görüntüler."""
+        if obj.is_graduated:
+            return 'graduated', 'Mezun'
+        return 'active', 'Aktif Öğrenci'
+
+    @display(description="Zimmetli Kitap")
+    def active_loans_count(self, obj: Student) -> int:
+        """Öğrencinin üzerindeki aktif ödünç kitap sayısını döndürür."""
+        return getattr(obj, 'loans_count', obj.borrowed_books.count())
+
+
+@admin.action(description="Seçili kitapları iade al (Müsait yap)")
+def mark_books_returned(modeladmin: Any, request: HttpRequest, queryset: QuerySet) -> None:
+    """Seçili ödünçteki kitapların iadesini alır ve mezun öğrencileri kontrol eder."""
     count = 0
     with transaction.atomic():
-        for book in queryset.filter(status='pending'):
-            book.approve_borrow()
+        for book in queryset.filter(status='approved'):
+            book.mark_returned()
             book.save()
             count += 1
-    modeladmin.message_user(request, f"{count} adet ödünç talebi onaylandı.")
+        purged_count, _ = Student.purge_graduated()
 
-
-@admin.action(description="Ödünç talebini reddet")
-def deny_borrow(modeladmin: Any, request: HttpRequest, queryset: QuerySet) -> None:
-    """Seçili onay bekleyen kitaplar için ödünç alma taleplerini reddeder."""
-    count = 0
-    with transaction.atomic():
-        for book in queryset.filter(status='pending'):
-            book.deny_borrow()
-            book.save()
-            count += 1
-    modeladmin.message_user(request, f"{count} adet ödünç talebi reddedildi.")
-
-
-@admin.action(description="İadeyi onayla")
-def confirm_return(modeladmin: Any, request: HttpRequest, queryset: QuerySet) -> None:
-    """Seçili iade onayı bekleyen kitapların iadelerini onaylar."""
-    count = 0
-    with transaction.atomic():
-        for book in queryset.filter(status='return_pending'):
-            book.confirm_return()
-            book.save()
-            count += 1
-    modeladmin.message_user(request, f"{count} adet kitabın iadesi onaylandı.")
-
-
-@admin.action(description="İade talebini reddet")
-def deny_return(modeladmin: Any, request: HttpRequest, queryset: QuerySet) -> None:
-    """Seçili iade onayı bekleyen kitapların iade taleplerini reddeder."""
-    count = 0
-    with transaction.atomic():
-        for book in queryset.filter(status='return_pending'):
-            book.deny_return()
-            book.save()
-            count += 1
-    modeladmin.message_user(request, f"{count} adet kitabın iade talebi reddedildi.")
+    msg = f"{count} adet kitap iade alındı ve müsait duruma getirildi."
+    if purged_count > 0:
+        msg += f" Zimmeti kalmayan {purged_count} mezun öğrenci kaydı otomatik temizlendi."
+    modeladmin.message_user(request, msg)
 
 
 @admin.register(Book)
 class BookAdmin(ModelAdmin):
-    list_display = ('cover_thumbnail', 'name', 'author', 'status_badge', 'borrowed_by')
-    list_filter = ('status',)
+    list_display = (
+        'cover_thumbnail',
+        'name',
+        'author',
+        'status_badge',
+        'borrowed_by',
+        'borrowed_at',
+        'due_date_badge',
+    )
+    list_filter = ('status', 'due_date')
     list_filter_submit = True
-    search_fields = ('name', 'author')
-    search_help_text = "Kitap adı veya yazar adına göre arama yapabilirsiniz."
+    search_fields = (
+        'name',
+        'author',
+        'borrowed_by__full_name',
+        'borrowed_by__student_number',
+    )
+    search_help_text = "Kitap adı, yazar, öğrenci adı veya okul numarasına göre arama yapabilirsiniz."
+    autocomplete_fields = ('borrowed_by',)
     list_per_page = 20
-    actions = [approve_borrow, deny_borrow, confirm_return, deny_return]
+    actions = [mark_books_returned]
 
     @display(description="Kapak", image=True)
     def cover_thumbnail(self, obj: Book) -> SafeText:
@@ -102,20 +134,24 @@ class BookAdmin(ModelAdmin):
     @display(
         description="Durum",
         label={
-            'pending': 'warning',
-            'approved': 'info',
-            'return_pending': 'purple',
+            'approved': 'warning',
             'returned': 'success',
-            'denied': 'danger',
         },
     )
     def status_badge(self, obj: Book) -> tuple[str, str]:
-        """Kitabın ödünç ve iade durumunu renkli durum rozeti olarak görüntüler."""
+        """Kitabın ödünç ve müsaitlik durumunu renkli durum rozeti olarak görüntüler."""
         status_labels = {
-            'pending': 'Onay Bekliyor',
-            'approved': 'Ödünç Verildi',
-            'return_pending': 'İade Onayı Bekliyor',
-            'returned': 'İade Edildi',
-            'denied': 'Reddedildi',
+            'approved': 'Ödünçte',
+            'returned': 'Müsait',
         }
         return obj.status, status_labels.get(obj.status, obj.get_status_display())
+
+    @display(description="Son İade Tarihi")
+    def due_date_badge(self, obj: Book) -> str:
+        """Kitabın son iade tarihini ve gecikme durumunu görüntüler."""
+        if not obj.due_date:
+            return "-"
+        formatted = obj.due_date.strftime("%d.%m.%Y")
+        if obj.is_overdue:
+            return f"{formatted} (Gecikti)"
+        return formatted

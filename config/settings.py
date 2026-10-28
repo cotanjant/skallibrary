@@ -106,9 +106,9 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Login / logout redirects
-LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "book_list"
-LOGOUT_REDIRECT_URL = "book_list"
+LOGIN_URL = "admin:login"
+LOGIN_REDIRECT_URL = "home"
+LOGOUT_REDIRECT_URL = "home"
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
@@ -198,17 +198,17 @@ UNFOLD = {
     "DASHBOARD_CALLBACK": "library.dashboard.dashboard_callback",
     "COLORS": {
         "primary": {
-            "50": "241 246 243",
-            "100": "220 234 227",
-            "200": "184 213 200",
-            "300": "139 184 165",
-            "400": "89 149 126",
-            "500": "51 118 97",
-            "600": "31 77 58",
-            "700": "27 67 51",
-            "800": "24 55 43",
-            "900": "21 46 37",
-            "950": "10 27 21",
+            "50": "242 242 250",
+            "100": "226 225 245",
+            "200": "197 195 235",
+            "300": "158 154 219",
+            "400": "116 111 199",
+            "500": "78 73 168",
+            "600": "40 36 113",
+            "700": "33 30 96",
+            "800": "27 24 79",
+            "900": "21 19 64",
+            "950": "14 12 43",
         },
     },
     "STYLES": [
@@ -236,7 +236,12 @@ UNFOLD = {
                         "title": "Kitap Kataloğu",
                         "icon": "menu_book",
                         "link": reverse_lazy("admin:library_book_changelist"),
-                        "badge": "library.dashboard.pending_books_badge",
+                        "badge": "library.dashboard.overdue_books_badge",
+                    },
+                    {
+                        "title": "Öğrenciler",
+                        "icon": "school",
+                        "link": reverse_lazy("admin:library_student_changelist"),
                     },
                 ],
             },
@@ -245,7 +250,7 @@ UNFOLD = {
                 "separator": True,
                 "items": [
                     {
-                        "title": "Öğrenci ve Yöneticiler",
+                        "title": "Yöneticiler",
                         "icon": "people",
                         "link": reverse_lazy("admin:auth_user_changelist"),
                     },

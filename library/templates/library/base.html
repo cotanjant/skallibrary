@@ -3,19 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}SKAL Kütüphanesi{% endblock %}</title>
-    <link rel="icon" type="image/png" href="{% static 'library/img/logo.png' %}">
+    <meta name="color-scheme" content="light">
+    <title>{% block title %}SKAL Kütüphanesi (Sezai Karakoç Anadolu Lisesi){% endblock %}</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'library/img/favicon-32x32.png' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'library/img/apple-touch-icon.png' %}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'library/css/style.css' %}">
 </head>
 <body>
     <header class="site-header">
         <div class="container header-inner">
-            <a class="brand" href="{% url 'book_list' %}">
-                <img src="{% static 'library/img/logo.png' %}" alt="Logo" class="brand-logo">
-                <span class="brand-text">SKAL Kütüphanesi</span>
+            <a class="brand" href="{% url 'home' %}">
+                <picture class="brand-picture">
+                    <source srcset="{% static 'library/img/logo.webp' %}" type="image/webp">
+                    <img src="{% static 'library/img/logo-sm.png' %}" alt="Sezai Karakoç Anadolu Lisesi Logosu" class="brand-logo" width="42" height="42">
+                </picture>
+                <span class="brand-copy">
+                    <span class="brand-text">SKAL Kütüphanesi</span>
+                    <span class="parenthetical-caption brand-caption">(Sezai Karakoç Anadolu Lisesi)</span>
+                </span>
             </a>
 
             <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="navMenu" aria-label="Menüyü aç veya kapat">
@@ -26,24 +34,16 @@
 
             <nav class="primary-nav" aria-label="Ana menü">
                 <ul class="nav-menu" id="navMenu">
-                    <li><a href="{% url 'book_list' %}" class="nav-link">Kitaplar</a></li>
-                    {% if user.is_authenticated %}
-                        {% if user.is_staff %}
-                            <li><a href="{% url 'admin:index' %}" class="nav-link nav-link-admin">Yönetim</a></li>
-                        {% endif %}
+                    <li>
+                        <a href="{% url 'home' %}" class="nav-link {% if request.resolver_match.url_name == 'home' %}is-active{% endif %}">Vitrin</a>
+                    </li>
+                    <li>
+                        <a href="{% url 'book_search' %}" class="nav-link {% if request.resolver_match.url_name == 'book_search' or request.resolver_match.url_name == 'book_list' %}is-active{% endif %}">Kitap Ara</a>
+                    </li>
+                    {% if user.is_staff %}
                         <li>
-                            <span class="user-badge" title="Giriş yapan kullanıcı">
-                                {{ user.username }}
-                            </span>
+                            <a href="{% url 'admin:index' %}" class="nav-link nav-link-admin">Yönetim Paneli</a>
                         </li>
-                        <li>
-                            <form method="post" action="{% url 'logout' %}" class="inline-form">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-sm">Çıkış Yap</button>
-                            </form>
-                        </li>
-                    {% else %}
-                        <li><a href="{% url 'login' %}" class="btn btn-primary btn-sm">Giriş Yap</a></li>
                     {% endif %}
                 </ul>
             </nav>
@@ -69,19 +69,20 @@
     <footer class="site-footer">
         <div class="container footer-inner">
             <div class="footer-brand">
-                <img src="{% static 'library/img/logo.png' %}" alt="Logo" class="footer-logo">
-                <span class="footer-title">SKAL Kütüphanesi</span>
+                <picture class="footer-picture">
+                    <source srcset="{% static 'library/img/logo.webp' %}" type="image/webp">
+                    <img src="{% static 'library/img/logo-sm.png' %}" alt="SKAL Logosu" class="footer-logo" width="32" height="32">
+                </picture>
+                <div class="footer-brand-copy">
+                    <span class="footer-title">SKAL Kütüphanesi</span>
+                    <span class="parenthetical-caption">(Sezai Karakoç Anadolu Lisesi Kütüphane Kataloğu)</span>
+                </div>
             </div>
-            <div class="footer-links">
-                <a href="{% url 'book_list' %}">Kitaplar</a>
-                {% if user.is_authenticated %}
-                    {% if user.is_staff %}
-                        <a href="{% url 'admin:index' %}">Yönetim</a>
-                    {% endif %}
-                {% else %}
-                    <a href="{% url 'login' %}">Giriş Yap</a>
-                {% endif %}
-            </div>
+            <nav class="footer-links" aria-label="Alt menü">
+                <a href="{% url 'home' %}">Vitrin</a>
+                <a href="{% url 'book_search' %}">Kitap Kataloğu ve Arama</a>
+                <a href="{% url 'admin:index' %}">Yönetim Paneli</a>
+            </nav>
         </div>
     </footer>
 

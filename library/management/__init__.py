@@ -1,0 +1,1 @@
+"""SKAL Kütüphanesi yönetim paketi."""
