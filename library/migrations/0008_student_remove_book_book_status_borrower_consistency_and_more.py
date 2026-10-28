@@ -53,7 +53,11 @@ class Migration(migrations.Migration):
             name='status',
             field=models.CharField(choices=[('returned', 'Müsait'), ('approved', 'Ödünçte')], db_index=True, default='returned', max_length=20, verbose_name='Durum'),
         ),
-        migrations.AlterField(
+        migrations.RemoveField(
+            model_name='book',
+            name='borrowed_by',
+        ),
+        migrations.AddField(
             model_name='book',
             name='borrowed_by',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='borrowed_books', to='library.student', verbose_name='Ödünç Alan Öğrenci'),
